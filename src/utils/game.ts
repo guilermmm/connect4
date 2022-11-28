@@ -24,7 +24,7 @@ export type TokenQueue = Token[];
 export type GameState =
   | { status: "Playing"; turnQueue: TokenQueue }
   | { status: "Draw" }
-  | { status: "Won"; winner: Token };
+  | { status: "Win"; winner: Token };
 
 export type Game = {
   board: Board;
@@ -69,7 +69,7 @@ export const getGameState = (
   const winner = getWinner(board);
 
   if (winner !== Token.Empty) {
-    return { status: "Won", winner };
+    return { status: "Win", winner };
   }
 
   if (isBoardFull(board)) {
@@ -205,4 +205,13 @@ export const playTurn = (
 export const cycleTurnQueue = (turnQueue: TokenQueue): [Token, TokenQueue] => {
   const [first, ...rest] = turnQueue;
   return [first, [...rest, first]] as [Token, TokenQueue];
+};
+
+export const boardColumns = (board: Board): Token[][] => {
+  const width = (board[0] as Token[]).length;
+  const height = board.length;
+
+  return Array.from({ length: width }, (_, i) =>
+    Array.from({ length: height }, (_, j) => (board[j] as Token[])[i] as Token)
+  );
 };

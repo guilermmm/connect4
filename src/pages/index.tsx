@@ -1,31 +1,54 @@
 import { type NextPage } from "next";
 import Head from "next/head";
+import { useMemo, useReducer, useState } from "react";
+import Maybe from "../types/Maybe";
 import {
+  boardColumns,
   BOARD_HEIGHT,
   BOARD_WIDTH,
   createGame,
   dropToken,
   Token,
+  type Game,
 } from "../utils/game";
+// import { trpc } from "../utils/trpc";
 
-import { trpc } from "../utils/trpc";
+type Action = { type: "DROP_TOKEN"; column: number };
 
-const initialGame = createGame(BOARD_WIDTH, BOARD_HEIGHT);
-
-const game = dropToken(initialGame, 0)
-  .chain((game) => dropToken(game, 0))
-  .chain((game) => dropToken(game, 0))
-  .chain((game) => dropToken(game, 0))
-  .chain((game) => dropToken(game, 2))
-  .chain((game) => dropToken(game, 5))
-  .chain((game) => dropToken(game, 5))
-  .chain((game) => dropToken(game, 3))
-  .chain((game) => dropToken(game, 4))
-  .chain((game) => dropToken(game, 4))
-  .getOrDefault(initialGame);
+const reducer = (game: Game, action: Action) => {
+  switch (action.type) {
+    case "DROP_TOKEN": {
+      return dropToken(game, action.column).getOrDefault(game);
+    }
+    default: {
+      return game;
+    }
+  }
+};
 
 const Home: NextPage = () => {
-  const hello = trpc.example.hello.useQuery({ text: "from tRPC" });
+  // const hello = trpc.example.hello.useQuery({ text: "from tRPC" });
+
+  const [game, dispatch] = useReducer(reducer, null, () =>
+    createGame(BOARD_WIDTH, BOARD_HEIGHT)
+  );
+
+  const nextToken: Maybe<Token> =
+    game.state.status === "Playing"
+      ? Maybe.just(game.state.turnQueue[0] as Token)
+      : Maybe.nothing();
+
+  const [hoveredCol, setHoveredCol] = useState<number | null>(null);
+  const firstAvailableRows = boardColumns(game.board).map((col) =>
+    col.findIndex((token) => token === Token.Empty)
+  );
+
+  const playingStatus = game.state.status === "Playing";
+  const drawStatus = game.state.status === "Draw";
+  const winner: Maybe<Token> =
+    game.state.status === "Win"
+      ? Maybe.just(game.state.winner)
+      : Maybe.nothing();
 
   return (
     <>
@@ -38,12 +61,41 @@ const Home: NextPage = () => {
         <h1 className="text-5xl font-extrabold tracking-tight text-[hsl(280,100%,70%)] sm:text-[5rem]">
           Connect 4
         </h1>
-        <div className="flex flex-col-reverse gap-2 font-mono">
-          {game.board.map((row, rowIndex) => (
-            <div className="flex flex-row gap-2" key={rowIndex}>
-              {row.map((token, tokenIndex) => (
+        <div>
+          {game.state.status === "Win" && (
+            <div className="text-2xl font-bold text-[hsl(280,100%,70%)]">
+              {game.state.winner} won!
+            </div>
+          )}
+        </div>
+        <div className="flex flex-row font-mono">
+          {boardColumns(game.board).map((col, colIndex) => (
+            <div
+              className={`flex ${
+                playingStatus ? "cursor-pointer" : ""
+              } flex-col-reverse gap-2 rounded-md p-1 transition-colors ${
+                hoveredCol === colIndex ? "bg-[hsl(280,100%,70%)]" : ""
+              }`}
+              onMouseEnter={() =>
+                game.state.status === "Playing" && setHoveredCol(colIndex)
+              }
+              onMouseLeave={() => setHoveredCol(null)}
+              onClick={() => dispatch({ type: "DROP_TOKEN", column: colIndex })}
+              key={colIndex}
+            >
+              {col.map((token, tokenIndex) => (
                 <div className="flex" key={tokenIndex}>
-                  <TokenFc token={token} />
+                  {token === Token.Empty ? (
+                    Maybe.isJust(nextToken) &&
+                    hoveredCol === colIndex &&
+                    firstAvailableRows[colIndex] === tokenIndex ? (
+                      <TokenFc token={nextToken.just} preview />
+                    ) : (
+                      <TokenFc token={token} />
+                    )
+                  ) : (
+                    <TokenFc token={token} />
+                  )}
                 </div>
               ))}
             </div>
@@ -56,14 +108,21 @@ const Home: NextPage = () => {
 
 export default Home;
 
-const tokenColor: Record<Token, string> = {
+const tokenBg: Record<Token, string> = {
   [Token.Empty]: "bg-white",
   [Token.Red]: "bg-red-500",
   [Token.Green]: "bg-green-500",
 };
 
-const TokenFc: React.FC<{ token: Token }> = ({ token }) => (
-  <div
-    className={`h-8 w-8 rounded-full border-2 border-black ${tokenColor[token]}`}
-  />
+const TokenFc: React.FC<{ token: Token; preview?: true }> = ({
+  token,
+  preview,
+}) => (
+  <div className={`rounded-full border-2 border-black`}>
+    <div
+      className={`h-8 w-8 rounded-full ${tokenBg[token]} ${
+        preview ? "animate-pulse-transparent" : ""
+      }`}
+    />
+  </div>
 );
